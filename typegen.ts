@@ -29,7 +29,7 @@ if (options.endpoint) {
   const json = await response.json();
   await Deno.writeFile(
     "./metadata.json",
-    new TextEncoder().encode(JSON.stringify(json)),
+    new TextEncoder().encode(JSON.stringify(json))
   );
 }
 
@@ -140,21 +140,21 @@ for await (const d of dir) {
       function (_sub, imp: string) {
         console.log(`Replacing ${imp}`);
         return replaceImport("from", imp);
-      },
+      }
     );
     replaced = replaced.replace(
       /import \'([^\']+)\';/g,
       function (_sub, imp: string) {
         console.log(`Replacing ${imp}`);
         return replaceImport("import", imp);
-      },
+      }
     );
     replaced = replaced.replace(
       /declare module \'([^\']+)\'/g,
       function (_sub, imp: string) {
         console.log(`Replacing ${imp}`);
         return replaceImport("declare module", imp, false);
-      },
+      }
     );
     if (replaced !== contents) {
       await Deno.writeTextFile(d.path, replaced);
@@ -162,3 +162,4 @@ for await (const d of dir) {
     }
   }
 }
+await Deno.remove("./metadata.json");
