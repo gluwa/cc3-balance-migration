@@ -1,0 +1,14 @@
+{
+  "imports": {
+    "@polkadot/api/augment": "./interfaces/augment-api.ts",
+    "@polkadot/types/augment": "./interfaces/augment-types.ts",
+    "@polkadot/types/lookup.ts": "./interfaces/types-lookup.ts",
+    "std/": "https://deno.land/std@0.211.0/",
+
+    "@polkadot/": "https://deno.land/x/polkadot@0.2.43/",
+
+    "cliffy/": "https://deno.land/x/cliffy@v1.0.0-rc.3/",
+
+    "subshape": "https://deno.land/x/subshape@v0.14.1/mod.ts"
+  }
+}
