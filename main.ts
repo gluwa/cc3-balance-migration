@@ -1,18 +1,14 @@
 import { ApiPromise } from "@polkadot/api/bundle.ts";
 import { withApi } from "./api.ts";
-import { decodeHex } from "std/encoding/hex.ts";
-import { concat } from "std/bytes/mod.ts";
+
 import { ApiDecoration } from "@polkadot/api/types/index.ts";
 import { AccountId32 } from "@polkadot/types/interfaces/types.ts";
-import {
-  blake2AsHex,
-  decodeAddress,
-  encodeAddress,
-} from "@polkadot/util-crypto/mod.ts";
+import { decodeAddress, encodeAddress } from "@polkadot/util-crypto/mod.ts";
 import { Command, HelpCommand } from "cliffy/command/mod.ts";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import { FrameSystemAccountInfo } from "@polkadot/types/lookup.ts";
 import { JsonAny, JsonObject, jsonParse, jsonStringify } from "./json.ts";
+import { BlockHash } from "@polkadot/types/interfaces/index.ts";
 
 export type Api = ApiDecoration<"promise">;
 
@@ -35,6 +31,7 @@ type BalanceMap = Map<string, bigint>;
 
 class RateLogger {
   constructor(
+    public itemsName = "items",
     private lastCount = 0,
     private start = performance.now(),
     private count = 0,
@@ -44,7 +41,9 @@ class RateLogger {
   log() {
     if (this.count - this.lastCount >= this.freq) {
       const now = performance.now();
-      console.log(`rate: ${this.count / ((now - this.start) / 1000)}/s`);
+      console.log(
+        `rate: ${this.count / ((now - this.start) / 1000)} ${this.itemsName}/s`
+      );
       this.lastCount = this.count;
     }
   }
@@ -55,52 +54,37 @@ class RateLogger {
   }
 }
 
-type SubstrateAccountId = {
-  type: "substrate";
-  value: string;
-};
+class Ss58AccountId {
+  constructor(public value: string) {
+    try {
+      decodeAddress(value);
+    } catch (_e) {
+      try {
+        this.value = encodeAddress(value);
+      } catch (_e) {
+        throw new Error(`invalid account id: ${value}`);
+      }
+    }
+  }
 
-type EvmAccountId = {
-  type: "evm";
-  value: string;
-};
+  static from(value: string) {
+    return new Ss58AccountId(value);
+  }
 
-type AccountId = SubstrateAccountId | EvmAccountId;
-
-export function evmAddressToSubstrateAddress(evmAddress: string) {
-  const evmAddressBytes = decodeHex(evmAddress.replace("0x", ""));
-  const prefixBytes = new TextEncoder().encode("evm:");
-  const concatBytes = concat([prefixBytes, evmAddressBytes]);
-  const addressHex = blake2AsHex(concatBytes, 256);
-  const substrateAddress = encodeAddress(addressHex);
-  return substrateAddress;
-}
-
-function evmToSubstrate(value: EvmAccountId): SubstrateAccountId {
-  return {
-    type: "substrate",
-    value: evmAddressToSubstrateAddress(value.value),
-  };
-}
-
-function toSubstrate(value: AccountId): SubstrateAccountId {
-  switch (value.type) {
-    case "substrate":
-      return value;
-    case "evm":
-      return evmToSubstrate(value);
+  toJson() {
+    return this.value;
   }
 }
 
 type BlockedAccounts = {
-  accounts: SubstrateAccountId[];
-  funnel: AccountId;
+  accounts: Ss58AccountId[];
+  funnel: Ss58AccountId;
 };
 
 function makeBlockedSet(blocked: BlockedAccounts) {
-  const set = new Set<string>();
+  const set = new Set<Ss58AccountId>();
   for (const account of blocked.accounts) {
-    set.add(toSubstrate(account).value);
+    set.add(account);
   }
   return set;
 }
@@ -133,12 +117,14 @@ async function mapBalances(
 ) {
   const balances: BalanceMap = new Map(initial ?? []);
 
-  const blockedSet = blocked ? makeBlockedSet(blocked) : new Set<string>();
-  const funnel = blocked ? toSubstrate(blocked.funnel).value : "";
+  const blockedSet = blocked
+    ? makeBlockedSet(blocked)
+    : new Set<Ss58AccountId>();
+  const funnel = blocked?.funnel.value;
 
   let accounts = await fetchAccounts(api);
 
-  const rate = new RateLogger();
+  const rate = new RateLogger("accounts");
 
   while (accounts.length > 0) {
     const lastKey = accounts[accounts.length - 1][0];
@@ -151,9 +137,10 @@ async function mapBalances(
       },
     ] of accounts) {
       const address = key.args[0].toString();
+      const ss58 = new Ss58AccountId(address);
       const total = free.toBigInt() + reserved.toBigInt();
 
-      if (blockedSet.has(address)) {
+      if (funnel && blockedSet.has(ss58)) {
         const existing = balances.get(funnel) ?? 0n;
         balances.set(funnel, existing + total);
       } else {
@@ -197,30 +184,36 @@ type Options = {
   config?: string | undefined;
   at?: string | undefined;
   merge: boolean;
+  pretty: boolean;
 };
 
 export async function migrateBalances(
   api: ApiPromise,
   options: Options,
-  inputSpec: string
+  inputSpec: JsonObject
 ) {
   const config = options.config ? await parseConfig(options.config) : {};
+  const finalized = await api.rpc.chain.getFinalizedHead<BlockHash>();
   // if not specified, use the finalized head
-  const atHash =
-    options.at ?? (await api.rpc.chain.getFinalizedHead()).toString();
+  const atHash = options.at ?? finalized.toString();
   // get a fixed view of the state at the specified block
   const apiAt = await api.at(atHash);
-  // read the input spec
-  let input = await readSpec(inputSpec);
-  console.log(input);
+
   // do the migration
-  input = doMigrateBalances(apiAt, input, config, options.merge);
+  inputSpec = await doMigrateBalances(apiAt, inputSpec, config, options.merge);
 
   if (options.outputSpec) {
     // write the output spec
-    await Deno.writeTextFile(options.outputSpec, jsonStringify(input));
+    console.log(`writing output to ${options.outputSpec}`);
+    await Deno.writeTextFile(
+      options.outputSpec,
+      jsonStringify(inputSpec, undefined, options.pretty ? 2 : undefined)
+    );
   } else {
-    console.log(jsonStringify(input));
+    // print the output spec
+    console.log(
+      jsonStringify(inputSpec, undefined, options.pretty ? 2 : undefined)
+    );
   }
 }
 
@@ -235,21 +228,10 @@ const Config = z.object({
 
 type Config = {
   blocked?: {
-    accounts: SubstrateAccountId[];
-    funnel: SubstrateAccountId;
+    accounts: Ss58AccountId[];
+    funnel: Ss58AccountId;
   };
 };
-
-function parseSubstrateAccountId(value: string): SubstrateAccountId {
-  if (value.startsWith("0x") || value.length !== 48) {
-    throw new Error(`invalid substrate account id: ${value}`);
-  }
-  decodeAddress(value);
-  return {
-    type: "substrate",
-    value,
-  };
-}
 
 async function parseConfig(path: string) {
   const content = await Deno.readTextFile(path);
@@ -257,22 +239,32 @@ async function parseConfig(path: string) {
   const newConfig: Config = {};
   if (config.blocked) {
     newConfig.blocked = {
-      accounts: config.blocked.accounts.map(parseSubstrateAccountId),
-      funnel: parseSubstrateAccountId(config.blocked.funnel),
+      accounts: config.blocked.accounts.map(Ss58AccountId.from),
+      funnel: Ss58AccountId.from(config.blocked.funnel),
     };
   }
   return newConfig;
 }
 
-async function main(api: ApiPromise) {
+async function main() {
   await new Command()
     .name("balance-migration")
+    .description("Tool to migrate balances from CC2 to CC3")
     .default("help")
     .command("help", new HelpCommand().global())
-    .command("migrate <input-spec:string>", "Migrate balances")
-    .description("Tool to migrate balances from CC2 to CC3")
-    .option("--output-spec -o <path:string>", "Output spec file", {
-      required: false,
+    .command(
+      "migrate [input-spec:string]",
+      "Migrate balances. If no input spec is provided, a new spec will be created with only the migrated balances."
+    )
+    .option(
+      "--output-spec -o <path:string>",
+      "Output spec file path. If omitted, output will be printed to the console",
+      {
+        required: false,
+      }
+    )
+    .option("-p --pretty", "Pretty print the output spec", {
+      default: false,
     })
     .option(
       "--merge",
@@ -281,14 +273,36 @@ async function main(api: ApiPromise) {
         default: false,
       }
     )
+    .option("--endpoint -e <endpoint:string>", "Endpoint to connect to", {
+      default: "wss://rpc.testnet.creditcoin.network/ws",
+    })
     .option("--at <block-hash:string>", "Block hash to pull balances from")
     .option("--config -c <path:string>", "Config file")
     .action(async (options, inputSpec) => {
-      await migrateBalances(api, options, inputSpec);
+      let inputSpecObj: JsonObject;
+      if (inputSpec) {
+        inputSpecObj = await readSpec(inputSpec);
+      } else {
+        inputSpecObj = {
+          genesis: {
+            runtime: {
+              balances: {
+                balances: [],
+              },
+            },
+          },
+        };
+      }
+
+      withApi(options.endpoint, async (api) => {
+        console.log("migrating balances...");
+
+        await migrateBalances(api, options, inputSpecObj);
+      });
     })
     .parse(Deno.args);
 }
 
 if (import.meta.main) {
-  await withApi("test", main);
+  await main();
 }
