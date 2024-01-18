@@ -194,6 +194,22 @@ async function parseConfig(path: string) {
   return newConfig;
 }
 
+async function inputSpecOrDefault(inputSpec?: string) {
+  if (inputSpec) {
+    return await readSpec(inputSpec);
+  } else {
+    return {
+      genesis: {
+        runtime: {
+          balances: {
+            balances: [],
+          },
+        },
+      },
+    };
+  }
+}
+
 async function main() {
   await new Command()
     .name("balance-migration")
@@ -227,25 +243,12 @@ async function main() {
     .option("--at <block-hash:string>", "Block hash to pull balances from")
     .option("--config -c <path:string>", "Config file")
     .action(async (options, inputSpec) => {
-      let inputSpecObj: JsonObject;
-      if (inputSpec) {
-        inputSpecObj = await readSpec(inputSpec);
-      } else {
-        inputSpecObj = {
-          genesis: {
-            runtime: {
-              balances: {
-                balances: [],
-              },
-            },
-          },
-        };
-      }
+      const spec = await inputSpecOrDefault(inputSpec);
 
       withApi(options.endpoint, async (api) => {
         console.log("migrating balances...");
 
-        await migrateBalances(api, options, inputSpecObj);
+        await migrateBalances(api, options, spec);
       });
     })
     .parse(Deno.args);
