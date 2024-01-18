@@ -4,11 +4,7 @@ import {
   AccountStorageKey,
   BalanceData,
 } from "./account-fetch.ts";
-import {
-  randomAsHex,
-  encodeAddress,
-  blake2AsHex,
-} from "@polkadot/util-crypto/mod.ts";
+import { encodeAddress, blake2AsHex } from "@polkadot/util-crypto/mod.ts";
 import { Ss58AccountId } from "./util.ts";
 
 import { assertEquals } from "std/assert/mod.ts";
