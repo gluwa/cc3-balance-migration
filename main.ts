@@ -82,9 +82,9 @@ type BlockedAccounts = {
 };
 
 function makeBlockedSet(blocked: BlockedAccounts) {
-  const set = new Set<Ss58AccountId>();
+  const set = new Set<string>();
   for (const account of blocked.accounts) {
-    set.add(account);
+    set.add(account.value);
   }
   return set;
 }
@@ -117,9 +117,7 @@ async function mapBalances(
 ) {
   const balances: BalanceMap = new Map(initial ?? []);
 
-  const blockedSet = blocked
-    ? makeBlockedSet(blocked)
-    : new Set<Ss58AccountId>();
+  const blockedSet = blocked ? makeBlockedSet(blocked) : new Set<string>();
   const funnel = blocked?.funnel.value;
 
   let accounts = await fetchAccounts(api);
@@ -140,7 +138,7 @@ async function mapBalances(
       const ss58 = new Ss58AccountId(address);
       const total = free.toBigInt() + reserved.toBigInt();
 
-      if (funnel && blockedSet.has(ss58)) {
+      if (funnel && blockedSet.has(ss58.value)) {
         const existing = balances.get(funnel) ?? 0n;
         balances.set(funnel, existing + total);
       } else {
@@ -235,7 +233,8 @@ type Config = {
 
 async function parseConfig(path: string) {
   const content = await Deno.readTextFile(path);
-  const config = Config.parse(content);
+  const contentJson = jsonParse(content);
+  const config = Config.parse(contentJson);
   const newConfig: Config = {};
   if (config.blocked) {
     newConfig.blocked = {
