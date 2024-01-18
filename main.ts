@@ -1,80 +1,26 @@
 import { ApiPromise } from "@polkadot/api/bundle.ts";
 import { withApi } from "./api.ts";
+import {
+  AccountFetcher,
+  AccountStorageKey,
+  ApiAccountFetcher,
+} from "./account-fetch.ts";
 
-import { ApiDecoration } from "@polkadot/api/types/index.ts";
-import { AccountId32 } from "@polkadot/types/interfaces/types.ts";
-import { decodeAddress, encodeAddress } from "@polkadot/util-crypto/mod.ts";
 import { Command, HelpCommand } from "cliffy/command/mod.ts";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
-import { FrameSystemAccountInfo } from "@polkadot/types/lookup.ts";
 import { JsonAny, JsonObject, jsonParse, jsonStringify } from "./json.ts";
 import { BlockHash } from "@polkadot/types/interfaces/index.ts";
+import { RateLogger, Ss58AccountId } from "./util.ts";
 
-export type Api = ApiDecoration<"promise">;
-
-// deno-lint-ignore no-explicit-any
-type StartKey = any;
-
-async function fetchAccounts(api: Api, startKey?: StartKey) {
-  const accounts = await api.query.system.account.entriesPaged<
-    FrameSystemAccountInfo,
-    [AccountId32]
-  >({
-    pageSize: 1000,
-    args: [],
-    startKey,
-  });
+async function fetchAccounts(
+  fetcher: AccountFetcher,
+  startKey?: AccountStorageKey
+) {
+  const accounts = await fetcher.fetchAccounts(startKey);
   return accounts;
 }
 
 type BalanceMap = Map<string, bigint>;
-
-class RateLogger {
-  constructor(
-    public itemsName = "items",
-    private lastCount = 0,
-    private start = performance.now(),
-    private count = 0,
-    private freq = 1000
-  ) {}
-
-  log() {
-    if (this.count - this.lastCount >= this.freq) {
-      const now = performance.now();
-      console.log(
-        `rate: ${this.count / ((now - this.start) / 1000)} ${this.itemsName}/s`
-      );
-      this.lastCount = this.count;
-    }
-  }
-
-  inc(count: number) {
-    this.count += count;
-    this.log();
-  }
-}
-
-class Ss58AccountId {
-  constructor(public value: string) {
-    try {
-      decodeAddress(value);
-    } catch (_e) {
-      try {
-        this.value = encodeAddress(value);
-      } catch (_e) {
-        throw new Error(`invalid account id: ${value}`);
-      }
-    }
-  }
-
-  static from(value: string) {
-    return new Ss58AccountId(value);
-  }
-
-  toJson() {
-    return this.value;
-  }
-}
 
 type BlockedAccounts = {
   accounts: Ss58AccountId[];
@@ -111,7 +57,7 @@ function makeBalancesConfig(balances: BalanceMap) {
 }
 
 async function mapBalances(
-  api: Api,
+  fetcher: AccountFetcher,
   initial?: [string, bigint][],
   blocked?: BlockedAccounts
 ) {
@@ -120,25 +66,19 @@ async function mapBalances(
   const blockedSet = blocked ? makeBlockedSet(blocked) : new Set<string>();
   const funnel = blocked?.funnel.value;
 
-  let accounts = await fetchAccounts(api);
+  let accounts = await fetchAccounts(fetcher);
 
   const rate = new RateLogger("accounts");
 
   while (accounts.length > 0) {
     const lastKey = accounts[accounts.length - 1][0];
-    accounts = await fetchAccounts(api, lastKey);
 
-    for (const [
-      key,
-      {
-        data: { free, reserved },
-      },
-    ] of accounts) {
-      const address = key.args[0].toString();
-      const ss58 = new Ss58AccountId(address);
-      const total = free.toBigInt() + reserved.toBigInt();
+    for (const [key, { free, reserved }] of accounts) {
+      const ss58 = key.accountId();
+      const address = ss58.value;
+      const total = free + reserved;
 
-      if (funnel && blockedSet.has(ss58.value)) {
+      if (funnel && blockedSet.has(address)) {
         const existing = balances.get(funnel) ?? 0n;
         balances.set(funnel, existing + total);
       } else {
@@ -150,20 +90,22 @@ async function mapBalances(
     }
 
     rate.inc(accounts.length);
+
+    accounts = await fetchAccounts(fetcher, lastKey);
   }
 
   return balances;
 }
 
-async function doMigrateBalances(
-  api: Api,
+export async function doMigrateBalances(
+  fetcher: AccountFetcher,
   inputSpec: JsonAny,
   config: Config,
-  merge: boolean
+  merge = false
 ) {
   // map balances
   const mapped = await mapBalances(
-    api,
+    fetcher,
     merge ? inputSpec.genesis.runtime.balances.balances : undefined,
     config.blocked
   );
@@ -197,8 +139,15 @@ export async function migrateBalances(
   // get a fixed view of the state at the specified block
   const apiAt = await api.at(atHash);
 
+  const fetcher = new ApiAccountFetcher(apiAt);
+
   // do the migration
-  inputSpec = await doMigrateBalances(apiAt, inputSpec, config, options.merge);
+  inputSpec = await doMigrateBalances(
+    fetcher,
+    inputSpec,
+    config,
+    options.merge
+  );
 
   if (options.outputSpec) {
     // write the output spec
