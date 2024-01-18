@@ -21,6 +21,7 @@ jobs:
         with:
           deno-version: v1.x
       - name: "Check format"
+        if: matrix.os != 'windows-latest'
         run: deno fmt --check --ignore=interfaces 
       - name: "Lint"
         run: deno lint --ignore=interfaces
