@@ -17,7 +17,7 @@ export type AccountStorageKey = {
 
 export abstract class AccountFetcher {
   abstract fetchAccounts(
-    startKey?: AccountStorageKey
+    startKey?: AccountStorageKey,
   ): Promise<[AccountStorageKey, BalanceData][]>;
 }
 
@@ -30,7 +30,7 @@ export class ApiAccountFetcher extends AccountFetcher {
   }
 
   async fetchAccounts(
-    startKey?: AccountStorageKey
+    startKey?: AccountStorageKey,
   ): Promise<[AccountStorageKey, BalanceData][]> {
     const accounts = await this.api.query.system.account.entriesPaged<
       FrameSystemAccountInfo,
@@ -63,7 +63,7 @@ export class ApiAccountFetcher extends AccountFetcher {
         };
 
         return [mappedKey, mappedData] as const;
-      }
+      },
     );
   }
 }
@@ -71,13 +71,13 @@ export class ApiAccountFetcher extends AccountFetcher {
 export class LocalAccountFetcher extends AccountFetcher {
   constructor(
     public accounts: [AccountStorageKey, BalanceData][],
-    public pageSize = 1000
+    public pageSize = 1000,
   ) {
     super();
   }
 
   fetchAccounts(
-    startKey?: AccountStorageKey
+    startKey?: AccountStorageKey,
   ): Promise<[AccountStorageKey, BalanceData][]> {
     if (!startKey) {
       return Promise.resolve(this.accounts.slice(0, this.pageSize));
@@ -88,7 +88,7 @@ export class LocalAccountFetcher extends AccountFetcher {
         return Promise.resolve([]);
       }
       return Promise.resolve(
-        this.accounts.slice(startKey.key + 1, startKey.key + 1 + this.pageSize)
+        this.accounts.slice(startKey.key + 1, startKey.key + 1 + this.pageSize),
       );
     }
     throw new Error("Invalid startKey " + startKey);

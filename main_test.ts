@@ -1,10 +1,10 @@
 import { doMigrateBalances } from "./main.ts";
 import {
-  LocalAccountFetcher,
   AccountStorageKey,
   BalanceData,
+  LocalAccountFetcher,
 } from "./account-fetch.ts";
-import { encodeAddress, blake2AsHex } from "@polkadot/util-crypto/mod.ts";
+import { blake2AsHex, encodeAddress } from "@polkadot/util-crypto/mod.ts";
 import { Ss58AccountId } from "./util.ts";
 
 import { assertEquals } from "std/assert/mod.ts";
@@ -66,11 +66,11 @@ class AccountsBuilder {
 }
 
 function expected(
-  accounts: [AccountStorageKey, BalanceData][]
+  accounts: [AccountStorageKey, BalanceData][],
 ): [string, bigint][] {
   return accounts.map(
     ([key, { free, reserved }]) =>
-      [key.accountId().value, free + reserved] as const
+      [key.accountId().value, free + reserved] as const,
   );
 }
 

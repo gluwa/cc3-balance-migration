@@ -14,7 +14,7 @@ import { RateLogger, Ss58AccountId } from "./util.ts";
 
 async function fetchAccounts(
   fetcher: AccountFetcher,
-  startKey?: AccountStorageKey
+  startKey?: AccountStorageKey,
 ) {
   const accounts = await fetcher.fetchAccounts(startKey);
   return accounts;
@@ -59,7 +59,7 @@ function makeBalancesConfig(balances: BalanceMap) {
 async function mapBalances(
   fetcher: AccountFetcher,
   initial?: [string, bigint][],
-  blocked?: BlockedAccounts
+  blocked?: BlockedAccounts,
 ) {
   const balances: BalanceMap = new Map(initial ?? []);
 
@@ -101,13 +101,13 @@ export async function doMigrateBalances(
   fetcher: AccountFetcher,
   inputSpec: JsonAny,
   config: Config,
-  merge = false
+  merge = false,
 ) {
   // map balances
   const mapped = await mapBalances(
     fetcher,
     merge ? inputSpec.genesis.runtime.balances.balances : undefined,
-    config.blocked
+    config.blocked,
   );
 
   // put the balances into the spec's expected format
@@ -130,7 +130,7 @@ type Options = {
 export async function migrateBalances(
   api: ApiPromise,
   options: Options,
-  inputSpec: JsonObject
+  inputSpec: JsonObject,
 ) {
   const config = options.config ? await parseConfig(options.config) : {};
   const finalized = await api.rpc.chain.getFinalizedHead<BlockHash>();
@@ -146,7 +146,7 @@ export async function migrateBalances(
     fetcher,
     inputSpec,
     config,
-    options.merge
+    options.merge,
   );
 
   if (options.outputSpec) {
@@ -154,12 +154,12 @@ export async function migrateBalances(
     console.log(`writing output to ${options.outputSpec}`);
     await Deno.writeTextFile(
       options.outputSpec,
-      jsonStringify(inputSpec, undefined, options.pretty ? 2 : undefined)
+      jsonStringify(inputSpec, undefined, options.pretty ? 2 : undefined),
     );
   } else {
     // print the output spec
     console.log(
-      jsonStringify(inputSpec, undefined, options.pretty ? 2 : undefined)
+      jsonStringify(inputSpec, undefined, options.pretty ? 2 : undefined),
     );
   }
 }
@@ -218,14 +218,14 @@ async function main() {
     .command("help", new HelpCommand().global())
     .command(
       "migrate [input-spec:string]",
-      "Migrate balances. If no input spec is provided, a new spec will be created with only the migrated balances."
+      "Migrate balances. If no input spec is provided, a new spec will be created with only the migrated balances.",
     )
     .option(
       "--output-spec -o <path:string>",
       "Output spec file path. If omitted, output will be printed to the console",
       {
         required: false,
-      }
+      },
     )
     .option("-p --pretty", "Pretty print the output spec", {
       default: false,
@@ -235,7 +235,7 @@ async function main() {
       "Merge balances from input spec into the result, instead of ignoring them",
       {
         default: false,
-      }
+      },
     )
     .option("--endpoint -e <endpoint:string>", "Endpoint to connect to", {
       default: "wss://rpc.testnet.creditcoin.network/ws",

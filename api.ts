@@ -30,7 +30,7 @@ function toEndpoint(endpoint: ApiEndpointTy): string {
 
 function makeApi(
   endpoint: ApiEndpointTy = KnownEndpoint.LOCAL,
-  initWasm = true
+  initWasm = true,
 ): Promise<ApiPromise> {
   const endpointUrl = toEndpoint(endpoint);
   return ApiPromise.create({
@@ -43,7 +43,7 @@ function makeApi(
 export async function withApi<T>(
   endpoint: ApiEndpointTy,
   f: (api: ApiPromise) => Promise<T>,
-  initWasm = true
+  initWasm = true,
 ): Promise<T> {
   await cryptoWaitReady();
   const api = await makeApi(endpoint, initWasm);

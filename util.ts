@@ -9,14 +9,14 @@ export class RateLogger {
     private lastCount = 0,
     private start = performance.now(),
     private count = 0,
-    private freq = 1000
+    private freq = 1000,
   ) {}
 
   log() {
     if (this.count - this.lastCount >= this.freq) {
       const now = performance.now();
       console.log(
-        `rate: ${this.count / ((now - this.start) / 1000)} ${this.itemsName}/s`
+        `rate: ${this.count / ((now - this.start) / 1000)} ${this.itemsName}/s`,
       );
       this.lastCount = this.count;
     }
