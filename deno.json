@@ -1,4 +1,8 @@
 {
-  "tasks": {},
+  "tasks": {
+    "runit": "deno run -A main.ts",
+
+    "typegen": "deno run -r -A https://raw.githubusercontent.com/nathanwhit/polkadotjs-typegen-deno/main/typegen.ts -e 'https://rpc.testnet.creditcoin.network' -o interfaces"
+  },
   "importMap": "import_map.json"
 }

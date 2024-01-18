@@ -7,8 +7,6 @@
 
     "@polkadot/": "https://deno.land/x/polkadot@0.2.43/",
 
-    "cliffy/": "https://deno.land/x/cliffy@v1.0.0-rc.3/",
-
-    "subshape": "https://deno.land/x/subshape@v0.14.1/mod.ts"
+    "cliffy/": "https://deno.land/x/cliffy@v1.0.0-rc.3/"
   }
 }
