@@ -77,7 +77,7 @@ Commands:
 ```
 
 You can also pass a configuration with a list of blocked accounts and an account to
-act as the holder for the funds of those blocked accounts. For example, if we have a 
+act as the holder for the funds of those blocked accounts. For example, if we have a file
 `config.json` with the contents:
 
 ```json
